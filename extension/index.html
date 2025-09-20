@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Extension</title>
+    <!-- Tailwind CSS CDN for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: "Inter", sans-serif;
+            background-color: #f3f4f6;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+
+    <!-- The root element where the React app will be rendered -->
+    <div id="root" class="bg-white p-8 rounded-lg shadow-xl max-w-sm w-full"></div>
+
+    <!-- Import React and ReactDOM from CDNs -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!--
+      This script block contains the React component.
+      It uses the "text/babel" type to enable in-browser JSX compilation.
+    -->
+    <script type="text/babel">
+        // A simple React component to display a message.
+        const App = () => {
+            return (
+                <div className="text-center">
+                    <h1 className="text-3xl font-bold text-gray-800 mb-4">Gemini Extension</h1>
+                    <p className="text-gray-600">
+                        Hello! Your extension is now set up.
+                    </p>
+                </div>
+            );
+        };
+
+        // Get the root element from the HTML
+        const container = document.getElementById('root');
+        // Create a root for the React app
+        const root = ReactDOM.createRoot(container);
+        // Render the App component
+        root.render(<App />);
+    </script>
+</body>
+</html>
