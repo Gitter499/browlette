@@ -109,6 +109,6 @@ To contribute to the project, please follow these steps:
 - [ ] Display search results in an iframe.
 - [ ] Implement the drag-and-drop ranking or voting UI.
 - [ ] Add fun and bold styling, fonts, and animations.
-- [ ] Integrate sound effects and a background soundtrack.
+- [ ] Play sound effects and background music based on game events from the server.
 - [ ] Fetch and display browser history.
 
