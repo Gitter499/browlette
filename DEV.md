@@ -10,6 +10,45 @@ Browlette is a multiplayer game where players share their browser search history
 - **Backend**: Node.js with Socket.IO
 - **AI**: Gemini API for search history processing
 
+## Branching Strategy
+
+All development should be done on a `dev` branch. For new features, create a branch from `dev` with the naming convention `dev/<feature-name>`.
+
+## Git Workflow
+
+To contribute to the project, please follow these steps:
+
+1.  **Switch to the `dev` branch:**
+    ```bash
+    git checkout dev
+    ```
+2.  **Pull the latest changes:**
+    ```bash
+    git pull origin dev
+    ```
+3.  **Create a new feature branch:**
+    ```bash
+    git checkout -b dev/<feature-name>
+    ```
+    Replace `<feature-name>` with a short, descriptive name for your feature (e.g., `dev/player-profile`).
+
+4.  **Make your changes and commit them:**
+    ```bash
+    git add .
+    git commit -m "feat: your descriptive commit message"
+    ```
+    Use a conventional commit message format (e.g., `feat:`, `fix:`, `docs:`).
+
+5.  **Push your feature branch to the remote repository:**
+    ```bash
+    git push origin dev/<feature-name>
+    ```
+
+6.  **Create a pull request:**
+    - Go to the GitHub repository in your browser.
+    - You should see a prompt to create a pull request from your new branch.
+    - Create a pull request from your feature branch to the `dev` branch.
+
 ## Development Setup
 
 ### Prerequisites
