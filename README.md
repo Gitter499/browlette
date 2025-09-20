@@ -1,6 +1,6 @@
 # Browlette
 
-Russian roulette for your search history. 
+Russian roulette for your search history 🔎
 
 ## Contributors
 * [**Rafayel Amirkhanyan**](https://github.com/Gitter499)
