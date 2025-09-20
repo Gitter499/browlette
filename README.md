@@ -2,8 +2,8 @@
 
 Russian roulette for your search history. 
 
-## Authors
-- Rafayel Amirkhanyan
-- Liana Karim
-- Lalit More
-- Devadarsh Arangaly Vijesh
+## Contributors
+* [**Rafayel Amirkhanyan**](https://github.com/Gitter499)
+* [**Liana Karim**](https://github.com/Liana-K)
+* [**Lalit More**]
+* [**Devadarsh Arangaly Vijesh**](https://github.com/devadarsh-av)
