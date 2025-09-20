@@ -7,8 +7,8 @@ const HomePage: React.FC = () => {
       <div className="box">
         <h1>Browlette</h1>
         <div className="buttons">
-          <button>Host a Game</button>
-          <button>Join a Game</button>
+          <button>Host</button>
+          <button>Join</button>
         </div>
       </div>
     </div>
