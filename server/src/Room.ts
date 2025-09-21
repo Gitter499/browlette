@@ -1,16 +1,24 @@
 import { Player } from './Player.js';
+import { RoomState } from './RoomState.js';
 
 export class Room {
   public id: string;
   public name: string;
   public players: Map<string, Player>;
   private maxPlayers: number;
+  public currentState: RoomState;
+  public submittedSearchHistories: Map<string, any[]>; // Map of playerId to their submitted search history
+  public submittedVotes: Map<string, any>; // Map of playerId to their submitted vote
+  public currentRoundSearchTerm: string | null = null;
 
   constructor(id: string, name: string, maxPlayers: number = 2) {
     this.id = id;
     this.name = name;
     this.players = new Map<string, Player>();
     this.maxPlayers = maxPlayers;
+    this.currentState = RoomState.WAITING_FOR_PLAYERS;
+    this.submittedSearchHistories = new Map<string, any[]>();
+    this.submittedVotes = new Map<string, any>();
   }
 
   addPlayer(player: Player): boolean {

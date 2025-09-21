@@ -1,0 +1,6 @@
+export enum RoomState {
+  WAITING_FOR_PLAYERS = 'WAITING_FOR_PLAYERS',
+  IN_GAME = 'IN_GAME',
+  VOTING = 'VOTING',
+  GAME_OVER = 'GAME_OVER',
+}

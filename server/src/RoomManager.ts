@@ -9,7 +9,10 @@ export class RoomManager {
   }
 
   createRoom(name: string, maxPlayers?: number): Room {
-    const id = Math.random().toString(36).substring(2, 15); // Simple unique ID
+    let id: string;
+    do {
+      id = Math.floor(1000 + Math.random() * 9000).toString(); // 4-digit numeric ID
+    } while (this.rooms.has(id));
     const room = new Room(id, name, maxPlayers);
     this.rooms.set(id, room);
     console.log(`Room '${name}' created with ID: ${id}`);

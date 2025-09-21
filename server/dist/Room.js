@@ -1,9 +1,14 @@
+import { RoomState } from './RoomState.js';
 export class Room {
     constructor(id, name, maxPlayers = 2) {
+        this.currentRoundSearchTerm = null;
         this.id = id;
         this.name = name;
         this.players = new Map();
         this.maxPlayers = maxPlayers;
+        this.currentState = RoomState.WAITING_FOR_PLAYERS;
+        this.submittedSearchHistories = new Map();
+        this.submittedVotes = new Map();
     }
     addPlayer(player) {
         if (this.players.size < this.maxPlayers) {

@@ -1,6 +1,9 @@
+import 'dotenv/config';
 import { WebSocketServer, WebSocket } from 'ws';
 import { RoomManager } from './RoomManager.js';
 import { Player } from './Player.js';
+import { RoomState } from './RoomState.js';
+import { GeminiClient } from './GeminiClient.js';
 
 interface CustomWebSocket extends WebSocket {
   id: string;
@@ -10,6 +13,15 @@ interface CustomWebSocket extends WebSocket {
 const wss = new WebSocketServer({ port: 8080 });
 const roomManager = new RoomManager();
 
+// TODO: Get Gemini API Key from environment variable
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+if (!GEMINI_API_KEY) {
+  throw new Error('GEMINI_API_KEY environment variable is not set. Please set it before starting the server.');
+}
+
+const geminiClient = new GeminiClient(GEMINI_API_KEY);
+
 console.log('WebSocket server started on port 8080');
 
 wss.on('connection', (ws: WebSocket) => {
@@ -17,7 +29,7 @@ wss.on('connection', (ws: WebSocket) => {
   customWs.id = Math.random().toString(36).substring(2, 15); // Unique ID for the WebSocket connection
   console.log(`Client ${customWs.id} connected`);
 
-  customWs.on('message', (message: string) => {
+  customWs.on('message', async (message: string) => {
     console.log(`Received message from ${customWs.id}: ${message}`);
     const parsedMessage = JSON.parse(message);
 
@@ -34,6 +46,74 @@ wss.on('connection', (ws: WebSocket) => {
           customWs.send(JSON.stringify({ type: 'roomJoined', roomId: parsedMessage.roomId, playerName: playerName }));
         } else {
           customWs.send(JSON.stringify({ type: 'joinRoomFailed', message: 'Could not join room.' }));
+        }
+        break;
+      case 'startGame':
+        const roomToStart = roomManager.getRoom(parsedMessage.roomId);
+        if (roomToStart && roomToStart.currentState === RoomState.WAITING_FOR_PLAYERS) {
+          roomToStart.currentState = RoomState.IN_GAME;
+          roomToStart.broadcast('gameStarted', { roomId: roomToStart.id });
+          console.log(`Game started in room ${roomToStart.id}`);
+        } else {
+          customWs.send(JSON.stringify({ type: 'error', message: 'Cannot start game.' }));
+        }
+        break;
+      case 'submitSearchHistory':
+        if (customWs.playerId && parsedMessage.roomId && parsedMessage.history) {
+          const room = roomManager.getRoom(parsedMessage.roomId);
+          if (room && room.currentState === RoomState.IN_GAME) {
+            room.submittedSearchHistories.set(customWs.playerId, parsedMessage.history);
+            console.log(`Player ${customWs.playerId} submitted search history for room ${room.id}`);
+
+            // Check if all players have submitted their search history
+            if (room.submittedSearchHistories.size === room.players.size) {
+              console.log(`All players submitted history in room ${room.id}. Processing with Gemini...`);
+              // Select a random player's history for now
+              const randomPlayerId = Array.from(room.players.keys())[Math.floor(Math.random() * room.players.size)];
+              const historyToProcess = room.submittedSearchHistories.get(randomPlayerId);
+
+              if (historyToProcess) {
+                const geminiResult = await geminiClient.processSearchHistory(historyToProcess);
+                room.currentRoundSearchTerm = geminiResult.selectedSearchTerm;
+                room.broadcast('searchRevealed', { 
+                  searchTerm: geminiResult.selectedSearchTerm,
+                  sentiment: geminiResult.sentiment,
+                  keywords: geminiResult.keywords,
+                  category: geminiResult.category,
+                });
+                room.currentState = RoomState.VOTING;
+                console.log(`Search term revealed in room ${room.id}: ${geminiResult.selectedSearchTerm}`);
+              } else {
+                console.error(`No history found for random player ${randomPlayerId} in room ${room.id}`);
+                room.broadcast('error', { message: 'Failed to process search history.' });
+              }
+              // Clear submitted histories for the next round
+              room.submittedSearchHistories.clear();
+            }
+          } else {
+            customWs.send(JSON.stringify({ type: 'error', message: 'Cannot submit history at this time.' }));
+          }
+        }
+        break;
+      case 'submitVote':
+        if (customWs.playerId && parsedMessage.roomId && parsedMessage.vote) {
+          const room = roomManager.getRoom(parsedMessage.roomId);
+          if (room && room.currentState === RoomState.VOTING) {
+            room.submittedVotes.set(customWs.playerId, parsedMessage.vote);
+            console.log(`Player ${customWs.playerId} submitted vote for room ${room.id}`);
+
+            // Check if all players have voted
+            if (room.submittedVotes.size === room.players.size) {
+              console.log(`All players voted in room ${room.id}. Calculating scores...`);
+              // TODO: Implement actual score calculation based on drag-and-drop rank voting
+              // For now, just broadcast a placeholder result
+              room.broadcast('roundResults', { message: 'Scores calculated (placeholder).' });
+              room.submittedVotes.clear();
+              room.currentState = RoomState.IN_GAME; // Or GAME_OVER if all rounds are done
+            }
+          } else {
+            customWs.send(JSON.stringify({ type: 'error', message: 'Cannot submit vote at this time.' }));
+          }
         }
         break;
       case 'leaveRoom':
