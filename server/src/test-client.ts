@@ -1,62 +1,133 @@
 import WebSocket from 'ws';
 
-const ws = new WebSocket('ws://localhost:8080');
+const WS_URL = 'ws://localhost:8080';
 
-ws.onopen = () => {
-  console.log('Connected to WebSocket server');
-
-  // Test: Create a room
-  ws.send(JSON.stringify({ type: 'createRoom', roomName: 'TestRoom' }));
-};
-
+let ws1: WebSocket;
+let ws2: WebSocket;
 let createdRoomId: string;
+let player1Id: string;
+let player2Id: string;
 
-ws.onmessage = (event) => {
-  const message = JSON.parse(event.data as string);
-  console.log('Received:', message);
+const dummySearchHistory = [
+  { title: 'how to hide a body', url: 'http://example.com/body' },
+  { title: 'why do cats stare', url: 'http://example.com/cats' },
+  { title: 'best way to make money fast', url: 'http://example.com/money' },
+];
 
-  if (message.type === 'roomCreated') {
-    createdRoomId = message.roomId;
-    console.log(`Room created with ID: ${createdRoomId}`);
+function setupPlayer1() {
+  ws1 = new WebSocket(WS_URL);
 
-    // Test: Join the created room
-    ws.send(JSON.stringify({ type: 'joinRoom', roomId: createdRoomId, playerName: 'TestPlayer1' }));
+  ws1.onopen = () => {
+    console.log('Player 1 Connected');
+    ws1.send(JSON.stringify({ type: 'createRoom', roomName: 'TestRoom' }));
+  };
 
-    // Test: Start the game after joining
-    setTimeout(() => {
-      ws.send(JSON.stringify({ type: 'startGame', roomId: createdRoomId }));
-    }, 500);
+  ws1.onmessage = (event) => {
+    const message = JSON.parse(event.data as string);
+    console.log('Player 1 Received:', message);
 
-  } else if (message.type === 'gameStarted') {
-    console.log('Game started. Submitting search history...');
-    // Test: Submit search history
-    const dummySearchHistory = [
-      { query: 'how to hide a body', timestamp: Date.now() - 100000 },
-      { query: 'why do cats stare', timestamp: Date.now() - 50000 },
-      { query: 'best way to make money fast', timestamp: Date.now() - 10000 },
-    ];
-    ws.send(JSON.stringify({ type: 'submitSearchHistory', roomId: createdRoomId, history: dummySearchHistory }));
+    switch (message.type) {
+      case 'roomCreated':
+        createdRoomId = message.roomId;
+        player1Id = message.hostId; // Player 1 is the host
+        console.log(`Room created with ID: ${createdRoomId} by Player 1 (ID: ${player1Id})`);
+        // Now setup Player 2 to join, after createdRoomId is set
+        setupPlayer2();
+        break;
+      case 'roomJoined':
+        player1Id = message.playerId; // Confirm Player 1's ID
+        console.log(`Player 1 (Host) confirmed in room ${createdRoomId}`);
+        break;
+      case 'playerJoined':
+        console.log(`Player 1 sees: ${message.payload.playerName} joined the room.`);
+        // If Player 2 has joined, Player 1 can start the game
+        if (message.players.length === 2) {
+          setTimeout(() => {
+            ws1.send(JSON.stringify({ type: 'startGame', roomId: createdRoomId }));
+          }, 1000);
+        }
+        break;
+      case 'gameStarted':
+        console.log('Player 1: Game started. Submitting history...');
+        ws1.send(JSON.stringify({ type: 'submitSearchHistory', roomId: createdRoomId, history: dummySearchHistory }));
+        break;
+      case 'searchRevealed':
+        console.log(`Player 1: Search revealed: ${message.payload.searchTerm}`);
+        // Player 1 (host) waits for votes
+        break;
+      case 'roundResults':
+        console.log('Player 1: Round results received.', message.payload);
+        setTimeout(() => {
+          ws1.send(JSON.stringify({ type: 'startNextRound', roomId: createdRoomId }));
+        }, 1000);
+        break;
+      case 'newRoundStarted':
+        console.log('Player 1: New round started. Submitting history...');
+        ws1.send(JSON.stringify({ type: 'submitSearchHistory', roomId: createdRoomId, history: dummySearchHistory }));
+        break;
+      case 'error':
+        console.error('Player 1 Error:', message.message);
+        break;
+    }
+  };
 
-  } else if (message.type === 'searchRevealed') {
-    console.log(`Search revealed: ${message.payload.searchTerm}. Submitting vote...`);
-    // Test: Submit vote (dummy data)
-    setTimeout(() => {
-      ws.send(JSON.stringify({ type: 'submitVote', roomId: createdRoomId, vote: { rank: 1, searchTerm: message.searchTerm } }));
-    }, 500);
+  ws1.onclose = () => {
+    console.log('Player 1 Disconnected');
+  };
 
-  } else if (message.type === 'roundResults') {
-    console.log('Round results received. Leaving room...');
-    // Test: Leave the room after some time
-    setTimeout(() => {
-      ws.send(JSON.stringify({ type: 'leaveRoom', roomId: createdRoomId }));
-    }, 500);
-  }
-};
+  ws1.onerror = (error) => {
+    console.error('Player 1 WebSocket error:', error);
+  };
+}
 
-ws.onclose = () => {
-  console.log('Disconnected from WebSocket server');
-};
+function setupPlayer2() {
+  ws2 = new WebSocket(WS_URL);
 
-ws.onerror = (error) => {
-  console.error('WebSocket error:', error);
-};
+  ws2.onopen = () => {
+    console.log('Player 2 Connected');
+    ws2.send(JSON.stringify({ type: 'joinRoom', roomId: createdRoomId, playerName: 'TestPlayer2' }));
+  };
+
+  ws2.onmessage = (event) => {
+    const message = JSON.parse(event.data as string);
+    console.log('Player 2 Received:', message);
+
+    switch (message.type) {
+      case 'roomJoined':
+        player2Id = message.playerId;
+        console.log(`Player 2 (ID: ${player2Id}) joined room ${createdRoomId}`);
+        break;
+      case 'gameStarted':
+        console.log('Player 2: Game started. Submitting history...');
+        ws2.send(JSON.stringify({ type: 'submitSearchHistory', roomId: createdRoomId, history: dummySearchHistory }));
+        break;
+      case 'searchRevealed':
+        console.log(`Player 2: Search revealed: ${message.payload.searchTerm}. Voting for Player 1...`);
+        // Player 2 votes for Player 1 (the host)
+        setTimeout(() => {
+          ws2.send(JSON.stringify({ type: 'submitVote', roomId: createdRoomId, vote: player1Id }));
+        }, 500);
+        break;
+      case 'roundResults':
+        console.log('Player 2: Round results received.', message.payload);
+        break;
+      case 'newRoundStarted':
+        console.log('Player 2: New round started. Submitting history...');
+        ws2.send(JSON.stringify({ type: 'submitSearchHistory', roomId: createdRoomId, history: dummySearchHistory }));
+        break;
+      case 'error':
+        console.error('Player 2 Error:', message.message);
+        break;
+    }
+  };
+
+  ws2.onclose = () => {
+    console.log('Player 2 Disconnected');
+  };
+
+  ws2.onerror = (error) => {
+    console.error('Player 2 WebSocket error:', error);
+  };
+}
+
+setupPlayer1();

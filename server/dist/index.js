@@ -6,7 +6,6 @@ import { RoomState } from './RoomState.js';
 import { GeminiClient } from './GeminiClient.js';
 const wss = new WebSocketServer({ port: 8080 });
 const roomManager = new RoomManager();
-// TODO: Get Gemini API Key from environment variable
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 if (!GEMINI_API_KEY) {
     throw new Error('GEMINI_API_KEY environment variable is not set. Please set it before starting the server.');
@@ -22,61 +21,109 @@ wss.on('connection', (ws) => {
         const parsedMessage = JSON.parse(message);
         switch (parsedMessage.type) {
             case 'createRoom':
-                const newRoom = roomManager.createRoom(parsedMessage.roomName);
-                customWs.send(JSON.stringify({ type: 'roomCreated', roomId: newRoom.id, roomName: newRoom.name }));
+                const newRoom = roomManager.createRoom(parsedMessage.roomName, customWs.id);
+                // Host is not a player, so no Player object for host
+                customWs.roomId = newRoom.id; // Link WebSocket to Room
+                console.log(`Room ${newRoom.id} created. Current state: ${newRoom.currentState}`);
+                customWs.send(JSON.stringify({
+                    type: 'roomCreated',
+                    roomId: newRoom.id,
+                    roomName: newRoom.name,
+                    hostId: newRoom.hostId,
+                    players: [], // No players yet
+                    submittedPlayerIds: [],
+                    currentRound: newRoom.currentRound,
+                    maxRounds: newRoom.maxRounds,
+                }));
                 break;
             case 'joinRoom':
                 const playerName = parsedMessage.playerName || `Guest-${customWs.id.substring(0, 5)}`;
                 const player = new Player(customWs.id, playerName, customWs);
                 customWs.playerId = player.id; // Link WebSocket to Player
+                customWs.roomId = parsedMessage.roomId; // Link WebSocket to Room
                 if (roomManager.joinRoom(parsedMessage.roomId, player)) {
-                    customWs.send(JSON.stringify({ type: 'roomJoined', roomId: parsedMessage.roomId, playerName: playerName }));
+                    const room = roomManager.getRoom(parsedMessage.roomId);
+                    if (room) {
+                        console.log(`Player ${player.name} joined room ${room.id}. Current state: ${room.currentState}`);
+                        customWs.send(JSON.stringify({
+                            type: 'roomJoined',
+                            roomId: room.id,
+                            roomName: room.name,
+                            playerName: playerName,
+                            playerId: player.id,
+                            hostId: room.hostId,
+                            players: Array.from(room.players.values()).map(p => ({ id: p.id, name: p.name })),
+                            submittedPlayerIds: Array.from(room.submittedSearchHistories.keys()),
+                            currentRound: room.currentRound,
+                            maxRounds: room.maxRounds,
+                        }));
+                        room.broadcast('playerJoined', { playerName: player.name }); // Notify others
+                    }
                 }
                 else {
-                    customWs.send(JSON.stringify({ type: 'joinRoomFailed', message: 'Could not join room.' }));
+                    const room = roomManager.getRoom(parsedMessage.roomId);
+                    let errorMessage = 'Could not join room.';
+                    if (!room) {
+                        errorMessage = 'Room not found.';
+                    }
+                    else if (Array.from(room.players.values()).some(p => p.name.toLowerCase() === playerName.toLowerCase())) {
+                        errorMessage = 'Player name already taken in this room.';
+                    }
+                    else { // If not found and not duplicate name, it must be full or some other reason for joinRoom to fail
+                        errorMessage = 'Room is full or another error occurred.';
+                    }
+                    customWs.send(JSON.stringify({ type: 'error', message: errorMessage }));
                 }
                 break;
             case 'startGame':
                 const roomToStart = roomManager.getRoom(parsedMessage.roomId);
-                if (roomToStart && roomToStart.currentState === RoomState.WAITING_FOR_PLAYERS) {
-                    roomToStart.currentState = RoomState.IN_GAME;
-                    roomToStart.broadcast('gameStarted', { roomId: roomToStart.id });
-                    console.log(`Game started in room ${roomToStart.id}`);
+                if (roomToStart) {
+                    if (customWs.id !== roomToStart.hostId) { // Check if client is host (using customWs.id as hostId)
+                        customWs.send(JSON.stringify({ type: 'error', message: 'Only the host can start the game.' }));
+                        break;
+                    }
+                    if (roomToStart.currentState === RoomState.WAITING_FOR_PLAYERS) {
+                        roomToStart.startNewRound(); // This will set IN_GAME state and currentTurnPlayerId
+                        roomToStart.broadcast('gameStarted', {
+                            roomId: roomToStart.id,
+                            currentTurnPlayerId: roomToStart.currentTurnPlayerId,
+                            currentRound: roomToStart.currentRound,
+                            maxRounds: roomToStart.maxRounds,
+                        });
+                    }
+                    else {
+                        customWs.send(JSON.stringify({ type: 'error', message: 'Cannot start game at this time.' }));
+                    }
                 }
                 else {
-                    customWs.send(JSON.stringify({ type: 'error', message: 'Cannot start game.' }));
+                    customWs.send(JSON.stringify({ type: 'error', message: 'Room not found.' }));
                 }
                 break;
             case 'submitSearchHistory':
                 if (customWs.playerId && parsedMessage.roomId && parsedMessage.history) {
                     const room = roomManager.getRoom(parsedMessage.roomId);
                     if (room && room.currentState === RoomState.IN_GAME) {
+                        // Validate turn
+                        if (customWs.playerId !== room.currentTurnPlayerId) {
+                            customWs.send(JSON.stringify({ type: 'error', message: `It's not your turn to submit history.` }));
+                            break;
+                        }
                         room.submittedSearchHistories.set(customWs.playerId, parsedMessage.history);
-                        console.log(`Player ${customWs.playerId} submitted search history for room ${room.id}`);
-                        // Check if all players have submitted their search history
-                        if (room.submittedSearchHistories.size === room.players.size) {
-                            console.log(`All players submitted history in room ${room.id}. Processing with Gemini...`);
-                            // Select a random player's history for now
-                            const randomPlayerId = Array.from(room.players.keys())[Math.floor(Math.random() * room.players.size)];
-                            const historyToProcess = room.submittedSearchHistories.get(randomPlayerId);
-                            if (historyToProcess) {
-                                const geminiResult = await geminiClient.processSearchHistory(historyToProcess);
-                                room.currentRoundSearchTerm = geminiResult.selectedSearchTerm;
-                                room.broadcast('searchRevealed', {
-                                    searchTerm: geminiResult.selectedSearchTerm,
-                                    sentiment: geminiResult.sentiment,
-                                    keywords: geminiResult.keywords,
-                                    category: geminiResult.category,
-                                });
-                                room.currentState = RoomState.VOTING;
-                                console.log(`Search term revealed in room ${room.id}: ${geminiResult.selectedSearchTerm}`);
-                            }
-                            else {
-                                console.error(`No history found for random player ${randomPlayerId} in room ${room.id}`);
-                                room.broadcast('error', { message: 'Failed to process search history.' });
-                            }
-                            // Clear submitted histories for the next round
-                            room.submittedSearchHistories.clear();
+                        // Process the current player's history
+                        const historyToProcess = parsedMessage.history; // Use the submitted history directly
+                        if (historyToProcess) {
+                            const geminiResult = await geminiClient.processSearchHistory(historyToProcess);
+                            room.currentRoundSearchTerm = geminiResult.selectedSearchTerm;
+                            room.currentRoundOwnerId = customWs.playerId; // The player who submitted is the owner
+                            room.broadcast('searchRevealed', {
+                                searchTerm: geminiResult.selectedSearchTerm,
+                                ownerPlayerId: customWs.playerId, // Include owner ID
+                            });
+                            room.currentState = RoomState.IN_GAME; // Transition to IN_GAME after search revealed
+                            room.advanceTurn(); // Advance turn after history is revealed and processed
+                        }
+                        else {
+                            room.broadcast('error', { message: 'Failed to process search history.' });
                         }
                     }
                     else {
@@ -84,24 +131,14 @@ wss.on('connection', (ws) => {
                     }
                 }
                 break;
-            case 'submitVote':
-                if (customWs.playerId && parsedMessage.roomId && parsedMessage.vote) {
+            case 'submitRankings':
+                if (customWs.playerId && parsedMessage.roomId && parsedMessage.rankings) {
                     const room = roomManager.getRoom(parsedMessage.roomId);
-                    if (room && room.currentState === RoomState.VOTING) {
-                        room.submittedVotes.set(customWs.playerId, parsedMessage.vote);
-                        console.log(`Player ${customWs.playerId} submitted vote for room ${room.id}`);
-                        // Check if all players have voted
-                        if (room.submittedVotes.size === room.players.size) {
-                            console.log(`All players voted in room ${room.id}. Calculating scores...`);
-                            // TODO: Implement actual score calculation based on drag-and-drop rank voting
-                            // For now, just broadcast a placeholder result
-                            room.broadcast('roundResults', { message: 'Scores calculated (placeholder).' });
-                            room.submittedVotes.clear();
-                            room.currentState = RoomState.IN_GAME; // Or GAME_OVER if all rounds are done
-                        }
+                    if (room && room.currentState === RoomState.RANKING) {
+                        room.submitRankings(customWs.playerId, parsedMessage.rankings);
                     }
                     else {
-                        customWs.send(JSON.stringify({ type: 'error', message: 'Cannot submit vote at this time.' }));
+                        customWs.send(JSON.stringify({ type: 'error', message: 'Cannot submit rankings at this time.' }));
                     }
                 }
                 break;
@@ -111,13 +148,34 @@ wss.on('connection', (ws) => {
                     customWs.send(JSON.stringify({ type: 'roomLeft', roomId: parsedMessage.roomId }));
                 }
                 break;
-            case 'chatMessage':
-                // Example: broadcast chat message to room
-                if (customWs.playerId && parsedMessage.roomId && parsedMessage.text) {
+            case 'startNextRound':
+                if (parsedMessage.roomId) {
                     const room = roomManager.getRoom(parsedMessage.roomId);
-                    const playerInRoom = room?.players.get(customWs.playerId);
-                    if (room && playerInRoom) {
-                        room.broadcast('chatMessage', { sender: playerInRoom.name, text: parsedMessage.text });
+                    if (room) {
+                        if (customWs.id !== room.hostId) { // Only host can start next round
+                            customWs.send(JSON.stringify({ type: 'error', message: 'Only the host can start the next round.' }));
+                            break;
+                        }
+                        room.startNewRound();
+                    }
+                    else {
+                        customWs.send(JSON.stringify({ type: 'error', message: 'Room not found.' }));
+                    }
+                }
+                break;
+            case 'setMaxRounds':
+                if (parsedMessage.roomId && parsedMessage.maxRounds) {
+                    const room = roomManager.getRoom(parsedMessage.roomId);
+                    if (room) {
+                        if (customWs.id !== room.hostId) { // Only host can set max rounds
+                            customWs.send(JSON.stringify({ type: 'error', message: 'Only the host can set the maximum number of rounds.' }));
+                            break;
+                        }
+                        room.setMaxRounds(parsedMessage.maxRounds);
+                        customWs.send(JSON.stringify({ type: 'maxRoundsUpdated', maxRounds: room.maxRounds }));
+                    }
+                    else {
+                        customWs.send(JSON.stringify({ type: 'error', message: 'Room not found.' }));
                     }
                 }
                 break;
@@ -129,11 +187,25 @@ wss.on('connection', (ws) => {
     customWs.on('close', () => {
         console.log(`Client ${customWs.id} disconnected`);
         // Handle player leaving rooms on disconnect
-        roomManager.rooms.forEach(room => {
-            if (customWs.playerId && room.players.has(customWs.playerId)) {
-                room.removePlayer(customWs.playerId);
+        if (customWs.roomId) {
+            const room = roomManager.getRoom(customWs.roomId);
+            if (room) {
+                if (customWs.id === room.hostId) {
+                    // Host disconnected, close the room and disconnect all players
+                    room.players.forEach(player => player.send(JSON.stringify({ type: 'hostDisconnected', message: 'Host disconnected. Room closed.' })));
+                    roomManager.rooms.delete(room.id);
+                    console.log(`Host ${customWs.id} disconnected. Room ${room.name} (ID: ${room.id}) has been closed.`);
+                }
+                else if (customWs.playerId) {
+                    // Player disconnected
+                    room.removePlayer(customWs.playerId);
+                    if (room.players.size === 0) {
+                        roomManager.rooms.delete(room.id);
+                        console.log(`Room ${room.name} (ID: ${room.id}) is empty and has been removed.`);
+                    }
+                }
             }
-        });
+        }
     });
     customWs.on('error', (error) => {
         console.error(`WebSocket error for client ${customWs.id}:`, error);

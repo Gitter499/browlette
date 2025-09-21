@@ -1,6 +1,7 @@
 # Dependencies
 /server/node_modules
 /extension/node_modules
+/server/.env
 
 # Build artifacts
 /extension/dist

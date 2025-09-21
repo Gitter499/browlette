@@ -12,9 +12,9 @@ async function runGeminiTest() {
   const geminiClient = new GeminiClient(GEMINI_API_KEY);
 
   const dummyHistory = [
-    { query: 'how to train your dragon', timestamp: Date.now() - 100000 },
-    { query: 'embarrassing moments compilation', timestamp: Date.now() - 50000 },
-    { query: 'why is my cat staring at me', timestamp: Date.now() - 10000 },
+    { title: 'how to train your dragon', url: 'http://example.com/dragon', timestamp: Date.now() - 100000 },
+    { title: 'embarrassing moments compilation', url: 'http://example.com/embarrassing', timestamp: Date.now() - 50000 },
+    { title: 'why is my cat staring at me', url: 'http://example.com/cat', timestamp: Date.now() - 10000 },
   ];
 
   console.log('Attempting to process search history with Gemini API...');

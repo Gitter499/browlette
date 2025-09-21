@@ -3,15 +3,13 @@ export class RoomManager {
     constructor() {
         this.rooms = new Map();
     }
-    createRoom(name, maxPlayers) {
-        let id;
-        do {
-            id = Math.floor(1000 + Math.random() * 9000).toString(); // 4-digit numeric ID
-        } while (this.rooms.has(id));
-        const room = new Room(id, name, maxPlayers);
-        this.rooms.set(id, room);
-        console.log(`Room '${name}' created with ID: ${id}`);
-        return room;
+    createRoom(roomName, hostId) {
+        // Generate a random 4-digit number
+        const roomId = Math.floor(1000 + Math.random() * 9000).toString();
+        const newRoom = new Room(roomId, roomName, hostId); // Pass hostId to Room constructor
+        this.rooms.set(roomId, newRoom);
+        console.log(`Room ${roomName} created with ID: ${roomId} by host ${hostId}`);
+        return newRoom;
     }
     getRoom(id) {
         return this.rooms.get(id);
