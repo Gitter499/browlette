@@ -1,2 +1,6 @@
 # Dependencies
 /server/node_modules
+/extension/node_modules
+
+# Build artifacts
+/extension/dist
