@@ -56,36 +56,45 @@ To contribute to the project, please follow these steps:
 - Node.js and npm
 - A Gemini API Key
 
-### Installation
+### Backend Setup
 
-1.  **Clone the repository.**
-2.  **Install backend dependencies:**
+1.  **Install backend dependencies:**
     ```bash
     cd server
     npm install
     ```
-3.  **Install frontend dependencies:**
-    ```bash
-    cd extension
-    npm install
-    ```
-
-### Running the Application
-
-1.  **Start the backend server:**
+2.  **Start the backend server:**
     ```bash
     cd server
     npm run dev
     ```
-2.  **Build the extension:**
+
+### Frontend Setup (React Chrome Extension)
+
+1.  **Install frontend dependencies:**
+    ```bash
+    cd extension
+    npm install
+    ```
+2.  **Start the frontend development server:**
+    ```bash
+    cd extension
+    npm run dev
+    ```
+3.  **Build the extension for production:**
     ```bash
     cd extension
     npm run build
     ```
-3.  **Load the extension in Chrome:**
+4.  **Load the extension in Chrome:**
     - Open Chrome and navigate to `chrome://extensions`.
     - Enable "Developer mode".
     - Click "Load unpacked" and select the `extension/dist` directory.
+
+5.  **Load the extension in Firefox:**
+    - Open Firefox and navigate to `about:debugging#/runtime/this-firefox`.
+    - Click "Load Temporary Add-on...".
+    - Select the `extension/dist` directory.
 
 ## Task List
 
